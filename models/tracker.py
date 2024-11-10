@@ -9,7 +9,7 @@ from models.networks.delta_dino import DeltaDINO
 from models.utils import load_pre_trained_model
 from data.dataset import RangeNormalizer
 from utils import bilinear_interpolate_video
-
+from tqdm import tqdm
 
 EPS = 1e-08
 
@@ -111,24 +111,22 @@ class Tracker(nn.Module):
         return sampled_embeddings
 
     def get_refined_embeddings(self, frames_set_t, return_raw_embeddings=False):
-        frames_dino_embeddings = self.get_dino_embed_video(frames_set_t=frames_set_t)
+        frames_dino_embeddings = self.get_dino_embed_video(frames_set_t=frames_set_t).cuda()
         refiner_input_frames = self.video[frames_set_t]
 
         # compute residual_embeddings in batches of size 8
         batch_size = 8
         n_frames = frames_set_t.shape[0]
-        residual_embeddings = torch.zeros_like(frames_dino_embeddings)
+        refined_embeddings = frames_dino_embeddings
         for i in range(0, n_frames, batch_size):
             end_idx = min(i+batch_size, n_frames)
-            residual_embeddings[i:end_idx] = self.delta_dino(refiner_input_frames[i:end_idx], frames_dino_embeddings[i:end_idx])
-
-        refined_embeddings = frames_dino_embeddings + residual_embeddings
-
+            refined_embeddings[i:end_idx] += self.delta_dino(refiner_input_frames[i:end_idx], frames_dino_embeddings[i:end_idx])
+        
         if return_raw_embeddings:
-            return refined_embeddings, residual_embeddings, frames_dino_embeddings
-        return refined_embeddings, residual_embeddings
+            return refined_embeddings, None, frames_dino_embeddings
+        return refined_embeddings, None
     
-    def cache_refined_embeddings(self, move_dino_to_cpu=False):
+    def cache_refined_embeddings(self, move_dino_to_cpu=True):
         refined_features, _ = self.get_refined_embeddings(torch.arange(0, self.video.shape[0]))
         self.refined_features = refined_features
         if move_dino_to_cpu:
@@ -156,10 +154,18 @@ class Tracker(nn.Module):
         )
     
     def get_corr_maps_for_frame_set(self, source_embeddings, frame_embeddings_set, target_frame_indices):
-        corr_maps_set = torch.einsum("bc,nchw->bnhw", source_embeddings, frame_embeddings_set)
+        # import pdb; pdb.set_trace()
+        embeddings_norm = frame_embeddings_set.norm(dim=1)
+        frame = frame_embeddings_set.shape[0]
+        corr_maps_set_list = []
+        corr_maps_set_list.append(torch.einsum("bc,nchw->bnhw", source_embeddings, frame_embeddings_set[:frame//2]))
+        corr_maps_set_list.append(torch.einsum("bc,nchw->bnhw", source_embeddings, frame_embeddings_set[frame//2:]))
+        del frame_embeddings_set
+        corr_maps_set = torch.cat(corr_maps_set_list, dim=1)
+        # corr_maps_set = torch.einsum("bc,nchw->bnhw", source_embeddings, frame_embeddings_set)
         corr_maps = corr_maps_set[torch.arange(source_embeddings.shape[0]), target_frame_indices.int(), :, :]
         
-        embeddings_norm = frame_embeddings_set.norm(dim=1)
+        # import pdb; pdb.set_trace()
         target_embeddings_norm = embeddings_norm[target_frame_indices.int()]
         source_embeddings_norm = source_embeddings.norm(dim=1).unsqueeze(-1).unsqueeze(-1)
         corr_maps_norm = (source_embeddings_norm * target_embeddings_norm)
@@ -174,6 +180,7 @@ class Tracker(nn.Module):
         return coords
     
     def get_point_predictions(self, inp, frame_embeddings):
+        # import pdb; pdb.set_trace()
         source_points_unnormalized, source_frame_indices, target_frame_indices, _ = inp
         source_points = self.normalize_points_for_sampling(source_points_unnormalized)
         source_embeddings = self.sample_embeddings(frame_embeddings, torch.cat([ source_points[:, :-1], source_frame_indices[:, None] ], dim=1)) # B x C
@@ -314,12 +321,12 @@ class Tracker(nn.Module):
             frame_embeddings = raw_embeddings = self.get_dino_embed_video(frames_set_t=frames_set_t)
         elif self.refined_features is not None: # load from cache
             frame_embeddings = self.refined_features[frames_set_t]
-            raw_embeddings = self.dino_embed_video[frames_set_t.to(self.dino_embed_video.device)]
+            # raw_embeddings = self.dino_embed_video[frames_set_t.to(self.dino_embed_video.device)]
         else:
             frame_embeddings, residual_embeddings, raw_embeddings = self.get_refined_embeddings(frames_set_t, return_raw_embeddings=True)
             self.residual_embeddings = residual_embeddings
-        self.frame_embeddings = frame_embeddings
-        self.raw_embeddings = raw_embeddings
+        # self.frame_embeddings = frame_embeddings
+        # self.raw_embeddings = raw_embeddings
         coords = self.get_point_predictions(inp, frame_embeddings)
 
         return coords

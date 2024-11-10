@@ -29,16 +29,33 @@ def run(args):
         anchor_cosine_similarity_threshold=dino_tracker.config['anchor_cosine_similarity_threshold'],
         cosine_similarity_threshold=dino_tracker.config['cosine_similarity_threshold'],
     )
+    
+    # embeddings_dir = os.path.join(os.path.dirname(dino_tracker.trajectories_dir),"dino_embeddings")
+    # refined_savename = os.path.join(embeddings_dir, "refined_embed_video.pt")
+    # print(f"Saving refined embeddings to {refined_savename}")
+    # torch.save(model_inference.model.refined_features, refined_savename)
 
-    query_points = get_query_points_from_benchmark_config(args.benchmark_pickle_path,
-                                                        args.video_id,
-                                                        rescale_sizes=[model.video.shape[-1], model.video.shape[-2]]) # x, y
-    for frame_idx in tqdm(sorted(query_points.keys()), desc="Saving model predictions"):
-        qpts_st_frame = torch.tensor(query_points[frame_idx], dtype=torch.float32, device=device) # N x 3, (x, y, t)
-        trajectories_at_st_frame, occlusion_at_st_frame = model_inference.infer(query_points=qpts_st_frame, batch_size=args.batch_size) # N x T x 3, N x T
+    # query_points = get_query_points_from_benchmark_config(args.benchmark_pickle_path,
+    #                                                     args.video_id,
+    #                                                     rescale_sizes=[model.video.shape[-1], model.video.shape[-2]]) # x, y
+    # import pdb; pdb.set_trace()
+    # for frame_idx in tqdm(sorted(query_points.keys()), desc="Saving model predictions"):
+    #     print(f"Processing frame {frame_idx}")
+    #     qpts_st_frame = torch.tensor(query_points[frame_idx], dtype=torch.float32, device=device) # N x 3, (x, y, t)
+    #     trajectories_at_st_frame, occlusion_at_st_frame = model_inference.infer(query_points=qpts_st_frame, batch_size=args.batch_size) # N x T x 3, N x T
         
-        np.save(os.path.join(trajectories_dir, f"trajectories_{frame_idx}.npy"), trajectories_at_st_frame[..., :2].cpu().detach().numpy())
-        np.save(os.path.join(occlusions_dir, f"occlusion_preds_{frame_idx}.npy"), occlusion_at_st_frame.cpu().detach().numpy())
+    #     np.save(os.path.join(trajectories_dir, f"trajectories_{frame_idx}.npy"), trajectories_at_st_frame[..., :2].cpu().detach().numpy())
+    #     np.save(os.path.join(occlusions_dir, f"occlusion_preds_{frame_idx}.npy"), occlusion_at_st_frame.cpu().detach().numpy())
+        
+    query_points = torch.load(os.path.join(args.data_path, "dino_embeddings/sam2_mask/queries_12.pt")).cuda()
+    query_points = query_points * torch.tensor([model.video.shape[-1], model.video.shape[-2]], dtype=torch.float32).cuda()
+    query_points = torch.cat([query_points, torch.zeros_like(query_points[:,0:1])], dim=-1)
+    trajectories_at_st_frame, occlusion_at_st_frame = model_inference.infer(query_points=query_points, batch_size=args.batch_size) # N x T x 3, N x T
+        
+    np.save(os.path.join(trajectories_dir, f"trajectories_dino_12.npy"), trajectories_at_st_frame[..., :2].cpu().detach().numpy())
+    np.save(os.path.join(occlusions_dir, f"occlusion_preds_dino_12.npy"), occlusion_at_st_frame.cpu().detach().numpy())
+        
+    
 
 
 

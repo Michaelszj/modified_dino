@@ -35,8 +35,10 @@ def run(args):
     segm_mask = dino_tracker.fg_masks[args.start_frame].to(device) if args.use_segm_mask else None # H x W / None
     grid_query_points = get_grid_query_points((orig_video_h, orig_video_w), segm_mask=segm_mask, device=device, interval=args.interval, query_frame=args.start_frame)
     grid_query_points = grid_query_points * torch.tensor([model_video_w / orig_video_w, model_video_h / orig_video_h, 1.0]).to(device) # resizes query points to model resolution
-
-    grid_trajectories, grid_occlusions = model_inference.infer(grid_query_points, batch_size=args.batch_size)
+    query = torch.load(os.path.join(args.data_path,'sam2_mask','query_dense.pt'))*torch.tensor([model_video_w, model_video_h])
+    query = torch.cat([query, torch.zeros_like(query[:, :1])], dim=1).cuda()
+    # import pdb; pdb.set_trace()
+    grid_trajectories, grid_occlusions = model_inference.infer(query, batch_size=args.batch_size)
     np.save(os.path.join(grid_trajectories_dir, "grid_trajectories.npy"), grid_trajectories[..., :2].cpu().detach().numpy())
     np.save(os.path.join(grid_occlusions_dir, "grid_occlusions.npy"), grid_occlusions.cpu().detach().numpy())
 

@@ -5,6 +5,7 @@ import torchvision.transforms as T
 
 from models.extractor import VitExtractor
 import os
+from tqdm import tqdm
 
 
 def add_config_paths(data_path, config):
@@ -51,7 +52,7 @@ def get_dino_features_video(video, model_name="dinov2_vitb14", facet='tokens', s
     layers = [n_layers - 1] if layer is None else [layer]
 
     dino_features_video = torch.zeros(size=(video.shape[0], dino_embedding_dim, ph, pw), device='cpu')
-    for i in range(video.shape[0]):
+    for i in tqdm(range(video.shape[0])):
         dino_input = imagenet_norm(video[[i]]).to(device)
         if facet == "keys":
             features = dino_extractor.get_keys_from_input(dino_input, layers=layers)

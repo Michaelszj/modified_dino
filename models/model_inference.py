@@ -45,7 +45,7 @@ def generate_trajectory(query_point:torch.tensor, video:torch.tensor, model:torc
     batch_size = video.shape[0] if batch_size is None else batch_size
     
     trajectory_pred = []
-    for start_t in range(0, video.shape[0], batch_size):
+    for start_t in (range(0, video.shape[0], batch_size)):
         end_t = min(start_t + batch_size, video.shape[0])
         trajectory_input = generate_trajectory_input(query_point, video, start_t=start_t, end_t=end_t)
         trajectory_coordinate_preds_normalized = model(trajectory_input, use_raw_features=use_raw_features)
@@ -66,7 +66,8 @@ def generate_trajectories(query_points:torch.tensor, video:torch.tensor, model:t
     """
     trajectories_list = []
     query_points = query_points.to(dtype=torch.float32) # just in case
-    for query_point in query_points:
+    for query_point in tqdm(query_points):
+        # import pdb; pdb.set_trace()
         trajectory_pred = generate_trajectory(query_point=query_point, video=video, model=model, range_normalizer=range_normalizer, dst_range=dst_range, use_raw_features=use_raw_features,
                                                      batch_size=batch_size)
         trajectories_list.append(trajectory_pred)
@@ -132,7 +133,7 @@ class ModelInference(torch.nn.Module):
         batch_size = batch_size if batch_size is not None else preds.shape[0]
         
         cycle_coords = []
-        for vis_frame in anchor_indices:
+        for vis_frame in tqdm(anchor_indices):
             # iterate over frames_set_t in batches of size batch_size
             coords = []
             for i in range(0, preds.shape[0], batch_size):
@@ -211,7 +212,8 @@ class ModelInference(torch.nn.Module):
             occlusion (torch.Tensor): Predicted occlusion. N x T. T is the number of time steps."""
         trajs = self.compute_trajectories(query_points, batch_size) # N x T x 3
         cos_sims = self.compute_trajectory_cos_sims(trajs, query_points)
-        anchor_trajs = self.compute_anchor_trajectories(trajs, cos_sims, batch_size)
-        occ = self.compute_occlusion(trajs, cos_sims, anchor_trajs)
+        occ = cos_sims < 0.7
+        # anchor_trajs = self.compute_anchor_trajectories(trajs, cos_sims, batch_size)
+        # occ = self.compute_occlusion(trajs, cos_sims, anchor_trajs)
         return trajs[..., :2], occ # N x T x 2, N x T
 
