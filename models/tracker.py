@@ -321,12 +321,13 @@ class Tracker(nn.Module):
             frame_embeddings = raw_embeddings = self.get_dino_embed_video(frames_set_t=frames_set_t)
         elif self.refined_features is not None: # load from cache
             frame_embeddings = self.refined_features[frames_set_t]
+            raw_embeddings = None
             # raw_embeddings = self.dino_embed_video[frames_set_t.to(self.dino_embed_video.device)]
         else:
             frame_embeddings, residual_embeddings, raw_embeddings = self.get_refined_embeddings(frames_set_t, return_raw_embeddings=True)
             self.residual_embeddings = residual_embeddings
-        # self.frame_embeddings = frame_embeddings
-        # self.raw_embeddings = raw_embeddings
+        self.frame_embeddings = frame_embeddings
+        self.raw_embeddings = raw_embeddings
         coords = self.get_point_predictions(inp, frame_embeddings)
 
         return coords
